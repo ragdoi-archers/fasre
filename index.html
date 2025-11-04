@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+    <title>FNAF 3D</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico"/>
+    <link rel="stylesheet" href="TemplateData/style.css"/>
+</head>
+<body class="dark">
+    <div id="unity-container" class="unity-desktop">
+        <canvas id="unity-canvas"></canvas>
+    </div>
+    <div id="loading-cover" style="display:none;">
+        <div id="unity-loading-bar">
+            <div id="unity-logo"><img src="logo.png"/></div>
+            <div id="unity-progress-bar-empty" style="display: none;">
+                <div id="unity-progress-bar-full"></div>
+            </div>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <script>
+        // ========== UNITY CONFIG ==========
+        const buildUrl = "Build";
+        const loaderUrl = buildUrl + "/Build.loader.js";
+        const config = {
+            dataUrl: buildUrl + "/Build.data.unityweb",
+            frameworkUrl: buildUrl + "/Build.framework.js.unityweb",
+            codeUrl: buildUrl + "/Build.wasm.unityweb",
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "COMEBACK Games",
+            productName: "FNAF 3D",
+            productVersion: "0.1",
+        };
+
+        const container     = document.querySelector("#unity-container");
+        const canvas        = document.querySelector("#unity-canvas");
+        const loadingCover  = document.querySelector("#loading-cover");
+        const progressEmpty = document.querySelector("#unity-progress-bar-empty");
+        const progressFull  = document.querySelector("#unity-progress-bar-full");
+        const spinner       = document.querySelector('.spinner');
+
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            container.className = "unity-mobile";
+        }
+
+        canvas.style.background = "url('background.jpg') center / cover";
+        loadingCover.style.display = "";  // SADECE 1 KEZ!
+
+        canvas.addEventListener("touchstart", () => window.focus());
+        canvas.addEventListener("pointerdown", () => window.focus());
+
+        let myGameInstance = null;
+
+        // ========== GÜVENLİ MESAJ ==========
+        function safeSend(object, method, param = "") {
+            if (myGameInstance) {
+                try { myGameInstance.SendMessage(object, method, param); }
+                catch (e) { console.warn(`[SafeSend] ${object}.${method} failed:`, e); }
+            }
+        }
+
+        // ========== TÜM YANDEX FONKSİYONLARI OTOMATİK ES GEÇ ==========
+        const yandexStubs = [
+            "InitGame", "InitYandex", "FullAdShow", "RewardedShow", "StickyAdActivity",
+            "BuyPayments", "GetPayments", "ConsumePurchase", "ConsumePurchases",
+            "SaveCloud", "LoadCloud", "InitLeaderboard", "SetLeaderboardScores",
+            "GetLeaderboardScores", "LanguageRequest", "RequestingEnvironmentData",
+            "Review", "PromptShow", "PaintRBT", "StaticRBTDeactivate", "OpenAuthDialog",
+            "GameReadyAPI", "NotAuthorized", "InitPlayer", "InitPayments"
+        ];
+
+        yandexStubs.forEach(name => {
+            window[name] = function(...args) {
+                console.log(`[Y/STUB] ${name} called:`, args);
+            };
+        });
+
+        // ========== UNITY LOADER ==========
+        const script = document.createElement("script");
+        script.src = loaderUrl;
+        script.onload = () => {
+            createUnityInstance(canvas, config, (progress) => {
+                spinner.style.display = "none";
+                progressEmpty.style.display = "";
+                progressFull.style.width = `${100 * progress}%`;
+            })
+            .then((unityInstance) => {
+                myGameInstance = unityInstance;
+                loadingCover.style.display = "none";  // Yükleme bitti
+
+                // ========== OFFLINE BAŞLATMA ==========
+                setTimeout(() => {
+                    safeSend('YandexGame', 'SetInitializationSDK', JSON.stringify({
+                        playerAuth: "resolved",
+                        playerName: "Player",
+                        playerId: "offline_123",
+                        playerPhoto: "null"
+                    }));
+
+                    safeSend('YandexGame', 'SetLanguage', 'en');
+
+                    const env = {
+                        language: "en", domain: "com", deviceType: "desktop",
+                        isMobile: false, isDesktop: true, isTablet: false, isTV: false,
+                        appID: "offline", browserLang: "en", payload: null,
+                        promptCanShow: false, reviewCanShow: false
+                    };
+                    safeSend('YandexGame', 'SetEnvironmentData', JSON.stringify(env));
+
+                    safeSend('YandexGame', 'SetLoadSaves', "noData");
+                    safeSend('YandexGame', 'GameReady');
+                }, 300);
+            })
+            .catch((msg) => alert("Oyun yüklenemedi: " + msg));
+        };
+        document.body.appendChild(script);
+    </script>
+</body>
+</html>
