@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Module>
+<ModulePrefs title="Google.com" />
+<Content type="html"><![CDATA[
+
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+    <title>classroom.google.com</title>
+    <link rel="shortcut icon" href="https://cdn.jsdelivr.net/gh/ragdoi-archers/fasre@main/TemplateData/favicon.ico"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ragdoi-archers/fasre@main/TemplateData/style.css"/>
+    <style>
+        /* Loading ekranı başlangıçta görünür olmalı */
+        #loading-cover {
+            display: flex !important;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        #unity-progress-bar-empty {
+            display: block !important;
+        }
+        .spinner {
+            display: block !important;
+        }
+    </style>
+</head>
+<body class="dark">
+    <div id="unity-container" class="unity-desktop">
+        <canvas id="unity-canvas"></canvas>
+    </div>
+
+    <!-- LOADING SCREEN -->
+    <div id="loading-cover">
+        <div id="unity-loading-bar">
+            <div id="unity-logo"><img src="https://cdn.jsdelivr.net/gh/ragdoi-archers/fasre@main/logo.png"/></div>
+            <div id="unity-progress-bar-empty">
+                <div id="unity-progress-bar-full" style="width: 0%;"></div>
+            </div>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+<script>
+(async () => {
+    // ========== ELEMANLARI TEK SEFERDE TANIMLA ==========
+    const progressEmpty = document.getElementById("unity-progress-bar-empty");
+    const progressFull  = document.getElementById("unity-progress-bar-full");
+    const spinner       = document.querySelector(".spinner");
+    const loadingCover  = document.getElementById("loading-cover");
+    const canvas        = document.getElementById("unity-canvas");
+    const container     = document.getElementById("unity-container");
+
+    // Başlangıçta loading ekranını göster
+    loadingCover.style.display = "flex";
+    loadingCover.style.opacity = "1";
+    progressEmpty.style.display = "block";
+    spinner.style.display = "block";
+    progressFull.style.width = "0%";
+
+    // ========== DATA MERGE ==========
+    const buildUrl = "https://cdn.jsdelivr.net/gh/ragdoi-archers/fasre@main/Build";
+    const totalParts = 7;
+    const partUrls = Array.from({length: totalParts}, (_, i) => `${buildUrl}/Build.data.unityweb.part${i}`);
+
+    let responses = [];
+    for (let i = 0; i < partUrls.length; i++) {
+        try {
+            const res = await fetch(partUrls[i]);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const buf = await res.arrayBuffer();
+            responses.push(buf);
+
+            const pct = Math.min(100, ((i + 1) / totalParts) * 100);
+            progressFull.style.width = `${pct}%`;
+        } catch (err) {
+            console.error(`❌ Parça yüklenemedi: ${partUrls[i]}`, err);
+        }
+    }
+
+    let mergedDataUrl = null;
+    if (responses.length > 0) {
+        const totalSize = responses.reduce((a, b) => a + b.byteLength, 0);
+        const mergedArray = new Uint8Array(totalSize);
+        let offset = 0;
+        for (const part of responses) {
+            mergedArray.set(new Uint8Array(part), offset);
+            offset += part.byteLength;
+        }
+        const blob = new Blob([mergedArray]);
+        mergedDataUrl = URL.createObjectURL(blob);
+        console.log("✅ Data birleştirildi:", mergedDataUrl);
+    } else {
+        console.warn("⚠️ Hiçbir parça yüklenemedi, fallback kullanılıyor.");
+    }
+
+    // ========== UNITY CONFIG ==========
+    const loaderUrl = buildUrl + "/Build.loader.js";
+    const config = {
+        dataUrl: mergedDataUrl || (buildUrl + "/Build.data.unityweb"),
+        frameworkUrl: buildUrl + "/Build.framework.js.unityweb",
+        codeUrl: buildUrl + "/Build.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "COMEBACK Games",
+        productName: "FNAF 3D",
+        productVersion: "0.1",
+    };
+
+    // Mobil kontrol
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        container.className = "unity-mobile";
+    }
+
+    canvas.style.background = "url('https://cdn.jsdelivr.net/gh/ragdoi-archers/fasre@main/background.jpg') center / cover";
+
+    // Focus için
+    canvas.addEventListener("touchstart", () => window.focus());
+    canvas.addEventListener("pointerdown", () => window.focus());
+
+    let myGameInstance = null;
+
+    // ========== GÜVENLİ MESAJ ==========
+    function safeSend(object, method, param = "") {
+        if (myGameInstance) {
+            try { myGameInstance.SendMessage(object, method, param); }
+            catch (e) { console.warn(`[SafeSend] ${object}.${method} failed:`, e); }
+        }
+    }
+
+    // ========== YANDEX STUBS ==========
+    const yandexStubs = [
+        "InitGame", "InitYandex", "FullAdShow", "RewardedShow", "StickyAdActivity",
+        "BuyPayments", "GetPayments", "ConsumePurchase", "ConsumePurchases",
+        "SaveCloud", "LoadCloud", "InitLeaderboard", "SetLeaderboardScores",
+        "GetLeaderboardScores", "LanguageRequest", "RequestingEnvironmentData",
+        "Review", "PromptShow", "PaintRBT", "StaticRBTDeactivate", "OpenAuthDialog",
+        "GameReadyAPI", "NotAuthorized", "InitPlayer", "InitPayments"
+    ];
+    yandexStubs.forEach(name => {
+        window[name] = function(...args) {
+            console.log(`[Y/STUB] ${name} called:`, args);
+        };
+    });
+
+    // ========== UNITY LOADER ==========
+    const script = document.createElement("script");
+    script.src = loaderUrl;
+    script.onload = async () => {
+        try {
+            const unityInstance = await createUnityInstance(canvas, config, (progress) => {
+                // Data birleştirme bitti, artık Unity progress göster
+                spinner.style.display = "none";
+                progressEmpty.style.display = "block";
+                progressFull.style.width = `${progress * 100}%`;
+            });
+
+            myGameInstance = unityInstance;
+
+            // Unity yüklendi → loading ekranını kaldır
+            loadingCover.style.opacity = "0";
+            setTimeout(() => {
+                loadingCover.style.display = "none";
+            }, 500);
+
+            // ========== OFFLINE BAŞLATMA ==========
+            setTimeout(() => {
+                safeSend('YandexGame', 'SetInitializationSDK', JSON.stringify({
+                    playerAuth: "resolved",
+                    playerName: "Player",
+                    playerId: "offline_123",
+                    playerPhoto: "null"
+                }));
+                safeSend('YandexGame', 'SetLanguage', 'en');
+                const env = {
+                    language: "en", domain: "com", deviceType: "desktop",
+                    isMobile: false, isDesktop: true, isTablet: false, isTV: false,
+                    appID: "offline", browserLang: "en", payload: null,
+                    promptCanShow: false, reviewCanShow: false
+                };
+                safeSend('YandexGame', 'SetEnvironmentData', JSON.stringify(env));
+                safeSend('YandexGame', 'SetLoadSaves', "noData");
+                safeSend('YandexGame', 'GameReady');
+            }, 300);
+
+        } catch (msg) {
+            alert("Oyun yüklenemedi: " + msg);
+        }
+    };
+    script.onerror = () => alert("Loader script yüklenemedi!");
+    document.body.appendChild(script);
+
+})();
+</script>
+</body>
+</html>
+
+]]></Content>
+</Module>
